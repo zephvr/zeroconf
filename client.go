@@ -376,14 +376,25 @@ func (c *client) periodicQuery(ctx context.Context, params *lookupParams) error 
 	bo.MaxInterval = 60 * time.Second
 	bo.Reset()
 
+	var timer *time.Timer
+	defer func() {
+		if timer != nil {
+			timer.Stop()
+		}
+	}()
 	for {
 		// Backoff and cancel logic.
 		wait := bo.NextBackOff()
 		if wait == backoff.Stop {
 			return fmt.Errorf("periodicQuery: abort due to timeout")
 		}
+		if timer == nil {
+			timer = time.NewTimer(wait)
+		} else {
+			timer.Reset(wait)
+		}
 		select {
-		case <-time.After(wait):
+		case <-timer.C:
 			// Wait for next iteration.
 		case <-params.stopProbing:
 			// Chan is closed (or happened in the past).
