@@ -40,6 +40,12 @@ func main() {
 	}
 
 	<-ctx.Done()
+
+	log.Println("List of service discovered", )
+	for entry := range resolver.GetEntries() {
+		log.Println(entry)
+	}
+
 	// Wait some additional time to see debug messages on go routine shutdown.
 	time.Sleep(1 * time.Second)
 }

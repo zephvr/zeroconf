@@ -133,6 +133,10 @@ func (r *Resolver) Lookup(ctx context.Context, instance, service, domain string,
 	return nil
 }
 
+func (r *Resolver) GetEntries() map[string]*ServiceEntry {
+	return r.c.sentEntries
+}
+
 // defaultParams returns a default set of QueryParams.
 func defaultParams(service string) *lookupParams {
 	return newLookupParams("", service, "local", false, make(chan *ServiceEntry))
@@ -143,6 +147,7 @@ type client struct {
 	ipv4conn *ipv4.PacketConn
 	ipv6conn *ipv6.PacketConn
 	ifaces   []net.Interface
+	sentEntries map[string]*ServiceEntry
 }
 
 // Client structure constructor
@@ -192,7 +197,7 @@ func (c *client) mainloop(ctx context.Context, params *lookupParams) {
 
 	// Iterate through channels from listeners goroutines
 	var entries map[string]*ServiceEntry
-	sentEntries := make(map[string]*ServiceEntry)
+	c.sentEntries = make(map[string]*ServiceEntry)
 
 	ticker := time.NewTicker(cleanupFreq)
 	defer ticker.Stop()
@@ -205,9 +210,9 @@ func (c *client) mainloop(ctx context.Context, params *lookupParams) {
 			c.shutdown()
 			return
 		case t := <-ticker.C:
-			for k, e := range sentEntries {
+			for k, e := range c.sentEntries {
 				if t.After(e.Expiry) {
-					delete(sentEntries, k)
+					delete(c.sentEntries, k)
 				}
 			}
 			continue
@@ -287,10 +292,10 @@ func (c *client) mainloop(ctx context.Context, params *lookupParams) {
 			for k, e := range entries {
 				if !e.Expiry.After(now) {
 					delete(entries, k)
-					delete(sentEntries, k)
+					delete(c.sentEntries, k)
 					continue
 				}
-				if _, ok := sentEntries[k]; ok {
+				if _, ok := c.sentEntries[k]; ok {
 					continue
 				}
 
@@ -307,7 +312,7 @@ func (c *client) mainloop(ctx context.Context, params *lookupParams) {
 				// This is also a point to possibly stop probing actively for a
 				// service entry.
 				params.Entries <- e
-				sentEntries[k] = e
+				c.sentEntries[k] = e
 				if !params.isBrowsing {
 					params.disableProbing()
 				}
