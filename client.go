@@ -26,6 +26,10 @@ const (
 	IPv4AndIPv6 = (IPv4 | IPv6) //< Default option.
 )
 
+var (
+	entries map[string]*ServiceEntry
+)
+
 type clientOpts struct {
 	listenOn IPType
 	ifaces   []net.Interface
@@ -133,6 +137,10 @@ func (r *Resolver) Lookup(ctx context.Context, instance, service, domain string,
 	return nil
 }
 
+func (r *Resolver) GetEntries() map[string]*ServiceEntry {
+	return entries
+}
+
 // defaultParams returns a default set of QueryParams.
 func defaultParams(service string) *lookupParams {
 	return newLookupParams("", service, "local", false, make(chan *ServiceEntry))
@@ -191,7 +199,6 @@ func (c *client) mainloop(ctx context.Context, params *lookupParams) {
 	}
 
 	// Iterate through channels from listeners goroutines
-	var entries map[string]*ServiceEntry
 	sentEntries := make(map[string]*ServiceEntry)
 
 	ticker := time.NewTicker(cleanupFreq)

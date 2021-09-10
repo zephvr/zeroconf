@@ -30,6 +30,10 @@ func main() {
 			log.Println(entry)
 		}
 		log.Println("No more entries.")
+		log.Println("List of service discovered", )
+		for entry := range resolver.GetEntries() {
+			log.Println(entry)
+		}
 	}(entries)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(*waitTime))
