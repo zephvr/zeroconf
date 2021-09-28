@@ -213,6 +213,9 @@ func (c *client) mainloop(ctx context.Context, params *lookupParams) {
 			for k, e := range c.sentEntries {
 				if t.After(e.Expiry) {
 					delete(c.sentEntries, k)
+				} else if t.After(e.Expiry.Add(-cleanupFreq)) {
+					// force network query if entry is about to endlife
+					params.resetProbing <- struct{}{}
 				}
 			}
 			continue
@@ -414,6 +417,8 @@ func (c *client) periodicQuery(ctx context.Context, params *lookupParams) error 
 		select {
 		case <-timer.C:
 			// Wait for next iteration.
+		case <-params.resetProbing:
+			bo.Reset()
 		case <-params.stopProbing:
 			// Chan is closed (or happened in the past).
 			// Done here. Received a matching mDNS entry.

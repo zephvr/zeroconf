@@ -71,9 +71,10 @@ type lookupParams struct {
 	ServiceRecord
 	Entries chan<- *ServiceEntry // Entries Channel
 
-	isBrowsing  bool
-	stopProbing chan struct{}
-	once        sync.Once
+	isBrowsing   bool
+	resetProbing chan struct{}
+	stopProbing  chan struct{}
+	once         sync.Once
 }
 
 // newLookupParams constructs a lookupParams.
@@ -82,6 +83,7 @@ func newLookupParams(instance, service, domain string, isBrowsing bool, entries 
 		ServiceRecord: *NewServiceRecord(instance, service, domain),
 		Entries:       entries,
 		isBrowsing:    isBrowsing,
+		resetProbing:  make(chan struct{}),
 	}
 	if !isBrowsing {
 		p.stopProbing = make(chan struct{})
