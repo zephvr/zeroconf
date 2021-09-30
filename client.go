@@ -222,7 +222,10 @@ func (c *client) mainloop(ctx context.Context, params *lookupParams) {
 					params.resetProbing <- struct{}{}
 				}
 			}
-			c.reloadMulticastInterface()
+			// If new interfaces are connected probe new queries
+			if c.reloadMulticastInterface() {
+				params.resetProbing <- struct{}{}
+			}
 			continue
 		case msg := <-msgCh:
 			now = time.Now()
@@ -492,18 +495,23 @@ func (c *client) sendQuery(msg *dns.Msg) error {
 	return nil
 }
 
-func (c *client) reloadMulticastInterface() {
+// Join or leave multicast group depending of network interface changes and return either or not new interfaces were added
+func (c *client) reloadMulticastInterface() (wereAdded bool) {
+	wereAdded = false
 	oldIfaces := c.ifaces
 	newIfaces := listMulticastInterfaces()
 	added, removed := diffMulticastInterface(oldIfaces, newIfaces, c.opts.ifaces)
 
 	if len(added) > 0 {
+		var err error
 		if (c.opts.listenOn & IPv4) > 0 {
-			joinUdp4MulticastPk(added, c.ipv4conn)
+			err = joinUdp4MulticastPk(added, c.ipv4conn)
+			wereAdded = err == nil
 		}
 
 		if (c.opts.listenOn & IPv6) > 0 {
-			joinUdp6MulticastPk(added, c.ipv6conn)
+			err = joinUdp6MulticastPk(added, c.ipv6conn)
+			wereAdded = wereAdded || (err == nil)
 		}
 	}
 
@@ -518,4 +526,6 @@ func (c *client) reloadMulticastInterface() {
 	}
 
 	c.ifaces = newIfaces
+
+	return
 }
