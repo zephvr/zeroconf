@@ -148,6 +148,7 @@ type client struct {
 	ipv6conn    *ipv6.PacketConn
 	ifaces      []net.Interface
 	sentEntries map[string]*ServiceEntry
+	opts        clientOpts
 }
 
 // Client structure constructor
@@ -162,6 +163,7 @@ func newClient(opts clientOpts) (*client, error) {
 		var err error
 		ipv4conn, err = joinUdp4Multicast(ifaces)
 		if err != nil {
+			ipv4conn.Close()
 			return nil, err
 		}
 	}
@@ -171,6 +173,7 @@ func newClient(opts clientOpts) (*client, error) {
 		var err error
 		ipv6conn, err = joinUdp6Multicast(ifaces)
 		if err != nil {
+			ipv6conn.Close()
 			return nil, err
 		}
 	}
@@ -179,6 +182,7 @@ func newClient(opts clientOpts) (*client, error) {
 		ipv4conn: ipv4conn,
 		ipv6conn: ipv6conn,
 		ifaces:   ifaces,
+		opts:     opts,
 	}, nil
 }
 
@@ -218,6 +222,7 @@ func (c *client) mainloop(ctx context.Context, params *lookupParams) {
 					params.resetProbing <- struct{}{}
 				}
 			}
+			c.reloadMulticastInterface()
 			continue
 		case msg := <-msgCh:
 			now = time.Now()
@@ -485,4 +490,32 @@ func (c *client) sendQuery(msg *dns.Msg) error {
 		}
 	}
 	return nil
+}
+
+func (c *client) reloadMulticastInterface() {
+	oldIfaces := c.ifaces
+	newIfaces := listMulticastInterfaces()
+	added, removed := diffMulticastInterface(oldIfaces, newIfaces, c.opts.ifaces)
+
+	if len(added) > 0 {
+		if (c.opts.listenOn & IPv4) > 0 {
+			joinUdp4MulticastPk(added, c.ipv4conn)
+		}
+
+		if (c.opts.listenOn & IPv6) > 0 {
+			joinUdp6MulticastPk(added, c.ipv6conn)
+		}
+	}
+
+	if len(removed) > 0 {
+		if (c.opts.listenOn & IPv6) > 0 {
+			leaveUdp4Multicast(removed, c.ipv4conn)
+		}
+
+		if (c.opts.listenOn & IPv6) > 0 {
+			leaveUdp6Multicast(removed, c.ipv6conn)
+		}
+	}
+
+	c.ifaces = newIfaces
 }

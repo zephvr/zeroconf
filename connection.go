@@ -43,6 +43,12 @@ func joinUdp6Multicast(interfaces []net.Interface) (*ipv6.PacketConn, error) {
 
 	// Join multicast groups to receive announcements
 	pkConn := ipv6.NewPacketConn(udpConn)
+	err = joinUdp6MulticastPk(interfaces, pkConn)
+
+	return pkConn, err
+}
+
+func joinUdp6MulticastPk(interfaces []net.Interface, pkConn *ipv6.PacketConn) error {
 	pkConn.SetControlMessage(ipv6.FlagInterface, true)
 
 	if len(interfaces) == 0 {
@@ -58,11 +64,21 @@ func joinUdp6Multicast(interfaces []net.Interface) (*ipv6.PacketConn, error) {
 		}
 	}
 	if failedJoins == len(interfaces) {
-		pkConn.Close()
-		return nil, fmt.Errorf("udp6: failed to join any of these interfaces: %v", interfaces)
+		return fmt.Errorf("udp6: failed to join any of these interfaces: %v", interfaces)
 	}
 
-	return pkConn, nil
+	return nil
+}
+
+func leaveUdp6Multicast(interfaces []net.Interface, pkConn *ipv6.PacketConn) {
+	failedLeave := 0
+
+	for _, iface := range interfaces {
+		if err := pkConn.LeaveGroup(&iface, &net.UDPAddr{IP: mdnsGroupIPv6}); err != nil {
+			// log.Println("Udp4 LeaveGroup failed for iface ", iface)
+			failedLeave++
+		}
+	}
 }
 
 func joinUdp4Multicast(interfaces []net.Interface) (*ipv4.PacketConn, error) {
@@ -74,6 +90,13 @@ func joinUdp4Multicast(interfaces []net.Interface) (*ipv4.PacketConn, error) {
 
 	// Join multicast groups to receive announcements
 	pkConn := ipv4.NewPacketConn(udpConn)
+	err = joinUdp4MulticastPk(interfaces, pkConn)
+
+	return pkConn, err
+}
+
+func joinUdp4MulticastPk(interfaces []net.Interface, pkConn *ipv4.PacketConn) error {
+	// Join multicast groups to receive announcements
 	pkConn.SetControlMessage(ipv4.FlagInterface, true)
 
 	if len(interfaces) == 0 {
@@ -89,11 +112,21 @@ func joinUdp4Multicast(interfaces []net.Interface) (*ipv4.PacketConn, error) {
 		}
 	}
 	if failedJoins == len(interfaces) {
-		pkConn.Close()
-		return nil, fmt.Errorf("udp4: failed to join any of these interfaces: %v", interfaces)
+		return fmt.Errorf("udp4: failed to join any of these interfaces: %v", interfaces)
 	}
 
-	return pkConn, nil
+	return nil
+}
+
+func leaveUdp4Multicast(interfaces []net.Interface, pkConn *ipv4.PacketConn) {
+	failedLeave := 0
+
+	for _, iface := range interfaces {
+		if err := pkConn.LeaveGroup(&iface, &net.UDPAddr{IP: mdnsGroupIPv4}); err != nil {
+			// log.Println("Udp4 LeaveGroup failed for iface ", iface)
+			failedLeave++
+		}
+	}
 }
 
 func listMulticastInterfaces() []net.Interface {
@@ -112,4 +145,38 @@ func listMulticastInterfaces() []net.Interface {
 	}
 
 	return interfaces
+}
+
+func diffMulticastInterface(old, new, include []net.Interface) (added, removed []net.Interface) {
+	newAddr := make(map[string]bool)
+	oldAddr := make(map[string]bool)
+	incAddr := make(map[string]bool)
+
+	for _, iface := range old {
+		oldAddr[iface.Name] = true
+	}
+
+	for _, iface := range new {
+		newAddr[iface.Name] = true
+	}
+
+	for _, iface := range include {
+		incAddr[iface.Name] = true
+	}
+
+	for _, iface := range new {
+		_, okOld := oldAddr[iface.Name]
+		_, okInc := incAddr[iface.Name]
+		if !okOld && (include == nil || okInc) {
+			added = append(added, iface)
+		}
+	}
+
+	for _, iface := range old {
+		if _, ok := newAddr[iface.Name]; !ok {
+			removed = append(removed, iface)
+		}
+	}
+
+	return
 }
